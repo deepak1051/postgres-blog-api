@@ -22,18 +22,26 @@ const createComment = asyncHandler(async (req, res) => {
 const getComments = asyncHandler(async (req, res) => {
   const { blogId } = req.params;
 
-  const comments = await pool.query('SELECT * FROM comments WHERE blog_id=$1', [
-    blogId,
-  ]);
+  const comments = await pool.query(
+    'SELECT text,username,comments.blog_id,comments.id,created_at FROM comments  JOIN users ON users.id=comments.user_id  WHERE blog_id=$1',
+    [blogId]
+  );
 
   res.status(200).json(comments.rows);
 });
 
 const deleteComment = asyncHandler(async (req, res) => {
-  const { commentId, blogId } = req.params;
+  const { commentId } = req.params;
+
+  if (!commentId) {
+    console.log('first');
+    res.status(404);
+    throw new Error('comment id is not provided.');
+  }
+  console.log(commentId);
 
   const _comment = await pool.query('SELECT * FROM comments WHERE id=$1', [
-    commentId,
+    parseInt(commentId),
   ]);
 
   if (!_comment.rows.length) {
@@ -41,7 +49,10 @@ const deleteComment = asyncHandler(async (req, res) => {
     throw new Error('comment not found');
   }
 
-  if (_comment.user_id !== req.user.id) {
+  console.log(_comment.rows);
+  console.log(req.user);
+
+  if (parseInt(_comment.rows[0].user_id) !== parseInt(req.user.id)) {
     res.status(401);
     throw new Error('You are not authorized to do it');
   }

@@ -4,6 +4,30 @@ import Blog from '../model/Blog.js';
 import User from '../model/User.js';
 import pool from '../db.js';
 
+const getSingleBlogData = async (blog_id, user_id) => {
+  const blog = await pool.query(
+    'SELECT blogs.id,username,title,body,imageurl FROM blogs JOIN users ON users.id=blogs.user_id WHERE blogs.id=$1 ',
+    [blog_id]
+  );
+  const _count_likes = await pool.query(
+    'SELECT blog_id ,COUNT(*) FROM likes GROUP BY blog_id HAVING blog_id=$1;',
+    [blog_id]
+  );
+
+  const isLiked = await pool.query(
+    'SELECT * FROM likes WHERE blog_id=$1 AND user_id=$2',
+    [blog_id, user_id]
+  );
+
+  const result = {
+    ...blog.rows[0],
+    like_count: parseInt(_count_likes.rows[0]?.count || 0),
+    isLiked: isLiked.rows.length ? true : false,
+  };
+
+  return result;
+};
+
 const getBlogsByUser = asyncHandler(async (req, res) => {
   const blogs = await pool.query('SELECT * FROM blogs WHERE user_id=$1', [
     req.user.id,
@@ -13,7 +37,7 @@ const getBlogsByUser = asyncHandler(async (req, res) => {
 
 const getAllBlogs = asyncHandler(async (req, res) => {
   const allBlogs = await pool.query(
-    'SELECT username,title,body,imageurl,blogs.id FROM blogs JOIN users ON users.id=blogs.user_id'
+    'SELECT blogs.id,username,title,body,imageurl,created_at FROM blogs JOIN users ON users.id=blogs.user_id  '
   );
 
   res.status(200).json(allBlogs.rows);
@@ -34,16 +58,9 @@ const postBlog = asyncHandler(async (req, res) => {
 });
 
 const getSingleBlog = asyncHandler(async (req, res) => {
-  console.log(req.params.id);
-  const blog = await pool.query('SELECT * FROM blogs WHERE blogs.id=$1', [
-    req.params.id,
-  ]);
+  const result = await getSingleBlogData(req.params.id, req.user.id);
 
-  if (!blog.rows.length) {
-    res.status(400);
-    throw new Error('The blog with the given ID was not found.');
-  }
-  res.status(200).json(blog.rows[0]);
+  res.status(200).json(result);
 });
 
 const updateBlog = asyncHandler(async (req, res) => {
@@ -108,31 +125,41 @@ const deleteBlog = asyncHandler(async (req, res) => {
 });
 
 const likeBlog = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  if (!mongoose.isValidObjectId(id)) {
+  const { blogId } = req.body;
+  if (!blogId) {
     res.status(400);
-    throw new Error('Please provide a valid mongoose ID');
+    throw new Error('blogId is required');
   }
 
-  const _blog = await Blog.findById(id);
+  const _blog = await pool.query('SELECT * FROM blogs WHERE id=$1', [blogId]);
 
-  if (!_blog) {
+  if (!_blog.rows.length) {
     res.status(401);
     throw new Error('Blog not found');
   }
 
-  const isLiked = _blog.likes.includes(req.user._id);
-  if (isLiked) {
-    const newBlog = _blog.filter((id) => id !== req.user._id);
-    await newBlog.save();
-  } else {
-    const newBlog = _blog.likes.push(req.user._id);
-    await newBlog.save();
+  const isLiked = await pool.query(
+    'SELECT * FROM likes WHERE blog_id=$1 AND user_id=$2',
+    [blogId, req.user.id]
+  );
+
+  if (isLiked.rows.length) {
+    // res.status(400);
+    // throw new Error('Already liked blog by this user');
+    await pool.query('DELETE FROM likes WHERE blog_id=$1 AND user_id=$2', [
+      blogId,
+      req.user.id,
+    ]);
+    return res.status(200).json('unliked blog');
   }
 
+  const liked = await pool.query(
+    'INSERT INTO likes (blog_id,user_id) VALUES($1,$2)',
+    [blogId, req.user.id]
+  );
   res.status(200).json('liked blog');
 });
+
 export {
   getBlogsByUser,
   getAllBlogs,

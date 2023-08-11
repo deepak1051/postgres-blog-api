@@ -9,5 +9,5 @@ const router = express.Router();
 
 router.post('/:blogId', protect, createComment);
 router.get('/:blogId', protect, getComments);
-router.delete('/:blogId/:commentId', protect, deleteComment);
+router.delete('/:commentId', protect, deleteComment);
 export default router;

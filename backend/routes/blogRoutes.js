@@ -23,6 +23,6 @@ router.put('/:id', protect, updateBlog);
 
 router.delete('/:id', protect, deleteBlog);
 
-router.post('/like/:id', protect, likeBlog);
+router.post('/like', protect, likeBlog);
 
 export default router;
